@@ -15,6 +15,11 @@
 
 #define PI 3.1415926536
 
+typedef struct coord {
+	float x;
+	float y;
+} point;
+
 //Global variables - you will need to change some of these
 float robot_X = 0.0, robot_Y = 0.0, robot_TH = 0.0;
 int oldL = 0, oldR = 0, oldT = 0;
@@ -195,6 +200,56 @@ void getInput()
 	}
 	for(int j = 0; j < 8; j++)
 		nxtDisplayClearTextLine(j);
+}
+
+/*****************************************
+ * Trajectories - these functions define
+ * the sample trajectories
+ *****************************************/
+
+void traj1 (float t, point p)
+{
+	p->x = 0.5 * cos(t/10) * sin(t/10);
+	p->y = 0.2 * sin(t/10) * sin(t/5);
+}
+
+void traj2 (float t, point p)
+{
+	p->x = 0.2 * sin(3*t/5);
+	p->y = 0.2 * cos(2*(t/5 + PI/4));
+}
+
+void traj3 (float t, point p)
+{
+	p->x = 0.2 * cos(t/10) * cos(t/5);
+	p->y = 0.2 * cos(3*t/10) * sin(t/10);
+}
+
+void traj4 (float t, point p)
+{
+	p->x = 0.2 * (0.5 * cos(3*t/10) - 0.75 * cos(t/5));
+	p->y = 0.2 * (-0.75 * sin(t/5) - 0.5 * sin(3*t/10));
+}
+
+void traj5 (float t, point p)
+{
+	float c = cos(t/5);
+	p->x = 0.1 * (-2*c*c - sin(t/10) + 1) * sin(t/5);
+	p->y = 0.1 * (-2*c*c*c - sint(t/10) + 1);
+}
+
+void traj6 (float t, point p)
+{
+	float c = cos(t/12);
+	float s = sin(t/4);
+	p->x = 0.1 * (2*c*c*c + 1)*s;
+	p->y = 0.1 * c * (1 - 2*s*s*s*s);
+}
+
+void traj7 (float t, point p)
+{
+	p->x = 0.04 * (5*cos(9*t/20) - 4*cos(t/4));
+	p->y = 0.04 * (-4*sin(t/4) - 5*sin(9*t/20));
 }
 
 /*****************************************
