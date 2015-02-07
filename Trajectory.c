@@ -7,6 +7,8 @@
 #define L 12.3
 #define F 7.75
 
+#define KP 1.5
+
 #define PI 3.1415926536
 
 typedef struct coord {
@@ -14,12 +16,16 @@ typedef struct coord {
 	float y;
 } point;
 
+void trajectory (int traj, float t, point *p);
+
 //Global variables - you will need to change some of these
-float robot_X = 0.0, robot_Y = 0.0, robot_TH = 0.0;
-float marker_X, marker_Y, marker_vX, marker_vY, marker_w;
+float robot_TH = 0.0;
+int tn;
+point robot_c, marker_c, marker_d;
+float marker_vd, marker_wd;
 int oldL = 0, oldR = 0, oldT = 0;
-int velocityUpdateInterval = 10;
-int PIDUpdateInterval = 15;
+int velocityUpdateInterval = 20;
+int PIDUpdateInterval = 2;
 
 float max(float a, float b){
 	if(a > b)
@@ -37,8 +43,9 @@ float max(float a, float b){
  * Complete this function so that it
  * continuously updates the robot's position
  *****************************************/
-task dead_reckoning()
+task trajectory_task()
 {
+	float t = 0.0;
 	oldL = nMotorEncoder[LeftMotor];
 	oldR = nMotorEncoder[RightMotor];
 	oldT = nPgmTime;
@@ -48,13 +55,14 @@ task dead_reckoning()
 		int curTime = nPgmTime;
 		int leftEnc = nMotorEncoder[LeftMotor];
 		int rightEnc = nMotorEncoder[RightMotor];
-		float t = (curTime - oldT) / 1000.0;
-		if(t == 0){
+		float dt = (curTime - oldT) / 1000.0;
+		t += dt;
+		if(dt == 0.0){
 			continue;
 		}
 		loops++;
-		float vl = (leftEnc - oldL) / t * PI / 180.0 * R;
-		float vr = (rightEnc - oldR) / t * PI / 180.0 * R;
+		float vl = (leftEnc - oldL) / dt / PI / 180.0 * R;
+		float vr = (rightEnc - oldR) / dt / PI / 180.0 * R;
 
 		//float v2 = min(vr, vl);
 		float vmax = max(abs(vr), abs(vl));
@@ -74,38 +82,60 @@ task dead_reckoning()
 		else{
 			r1 = r1 * -.002191 + .9885124;
 		}
+
 		float w = (vr - vl) / L;// * r1;
 
 		float k00 = v*cos(robot_TH);
 		float k01 = v*sin(robot_TH);
 		float k02 = w;
-		float k10 = v*cos(robot_TH + k02*.5*t);
-		float k11 = v*sin(robot_TH + k02*.5*t);
+		float k10 = v*cos(robot_TH + k02*.5*dt);
+		float k11 = v*sin(robot_TH + k02*.5*dt);
 		float k12 = w;
-		float k20 = v*cos(robot_TH + k12*.5*t);
-		float k21 = v*sin(robot_TH + k12*.5*t);
+		float k20 = v*cos(robot_TH + k12*.5*dt);
+		float k21 = v*sin(robot_TH + k12*.5*dt);
 		float k22 = w;
-		float k30 = v*cos(robot_TH + k22*t);
-		float k31 = v*sin(robot_TH + k22*t);
+		float k30 = v*cos(robot_TH + k22*dt);
+		float k31 = v*sin(robot_TH + k22*dt);
 		float k32 = w;
 
-		robot_X += t/6.0 * (k00 + 2*(k10 + k20) + k30);
-		robot_Y += t/6.0 * (k01 + 2*(k11 + k21) + k31);
-		robot_TH -= t/6.0 * (k02 + 2*(k12 + k22) + k32);
+		robot_c.x += dt/6.0 * (k00 + 2*(k10 + k20) + k30);
+		robot_c.y += dt/6.0 * (k01 + 2*(k11 + k21) + k31);
+		robot_TH -= dt/6.0 * (k02 + 2*(k12 + k22) + k32);
 
-		marker_X = robot_X + F * cos(robot_TH);
-		marker_Y = robot_Y + F * sin(robot_TH);
-		//marker_vX =
+
+		/*
+		float dl =
+
+		float dd = (vl + vr) / 2.0;
+		float dth = (vr-vl) / L;
+
+		robot_c.x += dd * cos(robot_TH);
+		robot_c.y += dd * sin(robot_TH);
+		robot_TH += dth;*/
+
+		marker_c.x = robot_c.x + F * cos(robot_TH);
+		marker_c.y = robot_c.y + F * sin(robot_TH);
+
+		trajectory(tn, t, marker_d);
+
+		float xErr = marker_d.x - marker_c.x;
+		float yErr = marker_d.y - marker_c.y;
+
+		marker_vd = KP*(xErr*cos(robot_TH) + yErr*sin(robot_TH));
+		marker_wd = KP*(xErr * -sin(robot_TH)/F + yErr * cos(robot_TH)/F);
+
+		float vld = 90.0 / PI * (2.0*marker_vd - L*marker_wd) / R;
+		float vrd = 90.0 / PI * (2.0*marker_vd + L*marker_wd) / R;
+
+		//motor[motorB] = 0.1 * vld;
+		//motor[motorC] = 0.1 * vrd;
 
 		//Code that plots the robot's current position and also prints it out as text
-		setPixel(50 + (int)(100.0 * robot_X), 32 + (int)(100.0 * robot_Y));
-		displayTextLine(0, "X: %f", robot_X);
-		displayTextLine(1, "Y: %f", robot_Y);
-		displayTextLine(2, "t: %f", 57.2958 * robot_TH);
-
-		displayTextLine(6, "mX: %f", marker_X);
-		displayTextLine(7, "mY: %f", marker_Y);
-
+		setPixel(50 + (int)(100.0 * marker_c.x), 32 + (int)(100.0 * marker_c.y));
+		displayTextLine(0, "X: %f", marker_c.x);
+		displayTextLine(1, "Y: %f", marker_c.y);
+		displayTextLine(2, "xd: %f", marker_d.x);
+		displayTextLine(3, "yd: %f", marker_d.y);
 
 		wait1Msec(velocityUpdateInterval);
 		oldL = leftEnc;
@@ -132,37 +162,37 @@ float clamp (float x, float minimum, float maximum)
 void traj1 (float t, point *p)
 {
 	t = clamp(t, 0.0, PI*20);
-	p->x = 0.5 * cos(t/10) * sin(t/10);
-	p->y = 0.2 * sin(t/10) * sin(t/5);
+	p->x = 0.5 * cos(t/10.0) * sin(t/10.0) * 100;
+	p->y = 0.2 * sin(t/10.0) * sin(t/5.0) * 100;
 }
 
 void traj2 (float t, point *p)
 {
 	t = clamp(t, 0.0, PI*10);
-	p->x = 0.2 * sin(3*t/5);
-	p->y = 0.2 * cos(2*(t/5 + PI/4));
+	p->x = 0.2 * sin(3*t/5) * 100;
+	p->y = 0.2 * cos(2*(t/5 + PI/4)) * 100;
 }
 
 void traj3 (float t, point *p)
 {
 	t = clamp(t, 0.0, PI*20);
-	p->x = 0.2 * cos(t/10) * cos(t/5);
-	p->y = 0.2 * cos(3*t/10) * sin(t/10);
+	p->x = 0.2 * cos(t/10) * cos(t/5) * 100;
+	p->y = 0.2 * cos(3*t/10) * sin(t/10) * 100;
 }
 
 void traj4 (float t, point *p)
 {
 	t = clamp(t, 0.0, PI*20);
-	p->x = 0.2 * (0.5 * cos(3*t/10) - 0.75 * cos(t/5));
-	p->y = 0.2 * (-0.75 * sin(t/5) - 0.5 * sin(3*t/10));
+	p->x = 0.2 * (0.5 * cos(3*t/10) - 0.75 * cos(t/5)) * 100;
+	p->y = 0.2 * (-0.75 * sin(t/5) - 0.5 * sin(3*t/10)) * 100;
 }
 
 void traj5 (float t, point *p)
 {
 	t = clamp(t, 0.0, PI*20);
 	float c = cos(t/5);
-	p->x = 0.1 * (-2*c*c - sin(t/10) + 1) * sin(t/5);
-	p->y = 0.1 * c *(-2*c*c*c - sin(t/10) + 1);
+	p->x = 0.1 * (-2*c*c - sin(t/10) + 1) * sin(t/5) * 100;
+	p->y = 0.1 * c *(-2*c*c*c - sin(t/10) + 1) * 100;
 }
 
 void traj6 (float t, point *p)
@@ -170,15 +200,24 @@ void traj6 (float t, point *p)
 	t = clamp(t, 0.0, PI*24);
 	float c = cos(t/12);
 	float s = sin(t/4);
-	p->x = 0.1 * (2*c*c*c + 1)*s;
-	p->y = 0.1 * cos(t/4) * (1 - 2*s*s*s*s);
+	p->x = 0.1 * (2*c*c*c + 1)*s * 100;
+	p->y = 0.1 * cos(t/4) * (1 - 2*s*s*s*s) * 100;
 }
 
 void traj7 (float t, point *p)
 {
 	t = clamp(t, 0.0, PI*40);
-	p->x = 0.04 * (5*cos(9*t/20) - 4*cos(t/4));
-	p->y = 0.04 * (-4*sin(t/4) - 5*sin(9*t/20));
+	p->x = 0.04 * (5*cos(9*t/20) - 4*cos(t/4)) * 100;
+	p->y = 0.04 * (-4*sin(t/4) - 5*sin(9*t/20)) * 100;
+}
+
+void traj8 (float t, point *p)
+{
+	//p->x = 2.0 * t;
+	//p->y = 0.0;
+	t = clamp(t, 0.0, 30.0);
+	p->x = 10.0 * cos(t / 30.0 * 2 * PI);
+	p->y = 10.0 * sin(t / 30.0 * 2 * PI);
 }
 
 void trajectory (int traj, float t, point *p)
@@ -205,6 +244,9 @@ void trajectory (int traj, float t, point *p)
 		case 6:
 			traj7(t, p);
 			break;
+		case 7:
+		  traj8(t, p);
+		  break;
 	}
 }
 
@@ -216,6 +258,7 @@ void trajectory (int traj, float t, point *p)
  int get_trajectory ()
  {
    int traj = 0;
+   int traj_count = 8;
    while (nNxtButtonPressed != kEnterButton)
    {
      displayTextLine(0, "Trajectory %d", (traj+1));
@@ -225,8 +268,8 @@ void trajectory (int traj, float t, point *p)
        traj++;
 
      if (traj < 0)
-       traj = 6;
-     else if (traj > 6)
+       traj = traj_count - 1;
+     else if (traj > traj_count - 1)
        traj = 0;
 
      wait1Msec(150);
@@ -251,43 +294,28 @@ task main()
 	motor[motorC] = 0;
 	nNxtButtonTask  = 0;
 
-	startTask(dead_reckoning);
-	for (int i=0; i < 3; i++) {
-		motor[motorB] = 10 + abs(rand() % 40);
-		motor[motorC] = 10 + abs(rand() % 40);
+
+	tn = get_trajectory();
+
+	trajectory(tn, 0.0, marker_c);
+	robot_c.x = marker_c.x - F;
+	robot_c.y = marker_c.y;
+
+	displayTextLine(0, "m: (%0.1f, %0.1f)", marker_c.x, marker_c.y);
+	displayTextLine(1, "r: (%0.1f, %0.1f)", robot_c.x, robot_c.y);
+
+	while(nNxtButtonPressed != kLeftButton) {}
+
+	startTask(trajectory_task);
+
+	for (int i = 0; i < 3; i++) {
+		motor[motorB] = abs(rand() % 40 + 10);
+		motor[motorC] = abs(rand() % 40 + 10);
 		wait1Msec(1000);
 	}
 
 	motor[motorB] = 0;
 	motor[motorC] = 0;
 
-	while (nNxtButtonPressed != kEnterButton) {}
-	stopTask(dead_reckoning);
-
-	// draw the graph
-
-	int traj = get_trajectory();
-	point p;
-
-	float t = 0.0;
-	float old_time = nPgmTime;
-	float curTime;
-
-	while(nNxtButtonPressed != kExitButton) {
-		curTime = nPgmTime;
-		t += (curTime - old_time) / 1000.0;
-		trajectory(traj, t, &p);
-
-		float x = p.x;
-		float y = p.y;
-
-		setPixel(50 + (int)(100.0 * x), 32 + (int)(100.0 * y));
-
-		displayTextLine(0, "%0.2f, %0.2f", x, y);
-		displayTextLine(7, "t: %0.2f", t);
-
-		old_time = curTime;
-
-		wait1Msec(velocityUpdateInterval);
-	}
+	while(nNxtButtonPressed != kExitButton) {}
 }
