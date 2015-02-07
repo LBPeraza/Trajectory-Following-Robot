@@ -1,4 +1,3 @@
-#pragma config(Sensor, S1,     LightSensor,    sensorLightActive)
 #pragma config(Motor,  motorA,          InMotor,       tmotorNXT, PIDControl, encoder)
 #pragma config(Motor,  motorB,          LeftMotor,     tmotorNXT, PIDControl, encoder)
 #pragma config(Motor,  motorC,          RightMotor,    tmotorNXT, PIDControl, encoder)
@@ -121,7 +120,7 @@ task dead_reckoning()
  * Function that draws a grid on the LCD
  * for easier readout of whatever is plot
  *****************************************/
-void draw_grid()
+/*void draw_grid()
 {
 	for(int i = 0; i < 65; i++)
 	{
@@ -163,7 +162,7 @@ void draw_grid()
 			}
 		}
 	}
-}
+} */
 
 /*****************************************
  * Function that fills in the inputB and
@@ -207,50 +206,120 @@ void getInput()
  * the sample trajectories
  *****************************************/
 
-void traj1 (float t, point p)
+float clamp (float x, float minimum, float maximum)
 {
+	if (x < minimum)
+		return minimum;
+	else if (x > maximum)
+		return maximum;
+	else
+		return x;
+}
+
+void traj1 (float t, point *p)
+{
+	t = clamp(t, 0.0, PI*20);
 	p->x = 0.5 * cos(t/10) * sin(t/10);
 	p->y = 0.2 * sin(t/10) * sin(t/5);
 }
 
-void traj2 (float t, point p)
+void traj2 (float t, point *p)
 {
+	t = clamp(t, 0.0, PI*10);
 	p->x = 0.2 * sin(3*t/5);
 	p->y = 0.2 * cos(2*(t/5 + PI/4));
 }
 
-void traj3 (float t, point p)
+void traj3 (float t, point *p)
 {
+	t = clamp(t, 0.0, PI*20);
 	p->x = 0.2 * cos(t/10) * cos(t/5);
 	p->y = 0.2 * cos(3*t/10) * sin(t/10);
 }
 
-void traj4 (float t, point p)
+void traj4 (float t, point *p)
 {
+	t = clamp(t, 0.0, PI*20);
 	p->x = 0.2 * (0.5 * cos(3*t/10) - 0.75 * cos(t/5));
 	p->y = 0.2 * (-0.75 * sin(t/5) - 0.5 * sin(3*t/10));
 }
 
-void traj5 (float t, point p)
+void traj5 (float t, point *p)
 {
+	t = clamp(t, 0.0, PI*20);
 	float c = cos(t/5);
 	p->x = 0.1 * (-2*c*c - sin(t/10) + 1) * sin(t/5);
-	p->y = 0.1 * (-2*c*c*c - sint(t/10) + 1);
+	p->y = 0.1 * c *(-2*c*c*c - sin(t/10) + 1);
 }
 
-void traj6 (float t, point p)
+void traj6 (float t, point *p)
 {
+	t = clamp(t, 0.0, PI*24);
 	float c = cos(t/12);
 	float s = sin(t/4);
 	p->x = 0.1 * (2*c*c*c + 1)*s;
-	p->y = 0.1 * c * (1 - 2*s*s*s*s);
+	p->y = 0.1 * cos(t/4) * (1 - 2*s*s*s*s);
 }
 
-void traj7 (float t, point p)
+void traj7 (float t, point *p)
 {
+	t = clamp(t, 0.0, PI*40);
 	p->x = 0.04 * (5*cos(9*t/20) - 4*cos(t/4));
 	p->y = 0.04 * (-4*sin(t/4) - 5*sin(9*t/20));
 }
+
+void trajectory (int traj, float t, point *p)
+{
+	switch (traj) {
+		case 0:
+			traj1(t, p);
+			break;
+		case 1:
+			traj2(t, p);
+			break;
+		case 2:
+			traj3(t, p);
+			break;
+		case 3:
+			traj4(t, p);
+			break;
+		case 4:
+			traj5(t, p);
+			break;
+		case 5:
+			traj6(t, p);
+			break;
+		case 6:
+			traj7(t, p);
+			break;
+	}
+}
+
+/*****************************************
+ * get_trajectory - determine trajectory
+ * to follow
+ *****************************************/
+
+ int get_trajectory ()
+ {
+   int traj = 0;
+   while (nNxtButtonPressed != kEnterButton)
+   {
+     nxtDisplayTextLine(0, "Trajectory %d", (traj+1));
+     if (nNxtButtonPressed == kLeftButton)
+       traj--;
+     else if (nNxtButtonPressed == kRightButton)
+       traj++;
+
+     if (traj < 0)
+       traj = 6;
+     else if (traj > 6)
+       traj = 0;
+
+     wait1Msec(300);
+   }
+   return traj;
+ }
 
 /*****************************************
  * Main function - it is not necessary to
@@ -265,23 +334,33 @@ task main()
 	nMotorPIDSpeedCtrl[motorC] = mtrSpeedReg;
 	nPidUpdateInterval = PIDUpdateInterval;
 
-	getInput();
-
-	draw_grid();
-	time1[T1] = 0;
-	startTask(dead_reckoning);
-	for(int i = 0; i < 3; i++)
-	{
-		motor[motorB] = inputB[i];
-		motor[motorC] = inputC[i];
-
-		wait10Msec(100 * 5);
-		motor[motorB] = 0;
-		motor[motorC] = 0;
-		wait1Msec(200);
-  }
   motor[motorB] = 0;
 	motor[motorC] = 0;
 	nNxtButtonTask  = 0;
-	while(nNxtButtonPressed != kExitButton) {}
+	// draw the graph
+
+	int traj = get_trajectory();
+	point p;
+
+	float t = 0.0;
+	float old_time = nPgmTime;
+	float curTime;
+
+	while(nNxtButtonPressed != kExitButton) {
+		curTime = nPgmTime;
+		t += (curTime - old_time) / 1000.0;
+		trajectory(traj, t, &p);
+
+		float x = p.x;
+		float y = p.y;
+
+		nxtSetPixel(50 + (int)(100.0 * x), 32 + (int)(100.0 * y));
+
+		nxtDisplayTextLine(0, "%0.2f, %0.2f", x, y);
+		nxtDisplayTextLine(7, "t: %0.2f", t);
+
+		old_time = curTime;
+
+		wait1Msec(10);
+	}
 }
