@@ -238,6 +238,62 @@ void traj8 (float t, point *p)
 		p->y = p->y * tScale;
 }
 
+void traj9 (float t, point *p)
+{
+	t = clamp(t / 1.2, 0.0, 39.1);
+	float x, y;
+	if (t <= 6.0) {
+		float r = 4.0 * log10(t/2.0 + 1);
+		x = r * sin(t/2.0);
+		y = r * cos(t/2.0);
+	} else if (t <= 7.45) {
+		t -= 6.0;
+		t += 3.05;
+		x = 0.2 * cos(2.5 * t) + 0.27;
+		y = -0.2 * sin(2.5 * t) - 2.2;
+	} else if (t <= 9.95) {
+		t -= 7.45;
+		t = t / 2.0 - 1.8;
+		float r = 0.76 + (t + 1.8)*(t+1.8);
+		x = r * cos(t) + 0.5;
+		y = r * sin(t) - 1.27;
+	} else if (t <= 15.19) {
+		t -= 9.95;
+		x = 0.5 * cos(1.2*t - PI/2) + 2.5;
+		y = 0.5 * sin(1.2*t - PI/2) - 1.98;
+	} else if (t <= 16.499) {
+		t -= 15.19;
+		x = cos(1.2*t - PI/2) + 2.5;
+		y = -0.7 * sin(1.2*t - PI/2) - 3.18;
+	} else if (t <= 19.639) {
+		t -= 16.499;
+		x = 0.15 * cos(t) + 3.35;
+		y = -sin(t) - 3.18;
+	} else if (t <= 26.339) {
+		t -= 19.639;
+		x = 0.3 * cos(t/2.5) + 2.9;
+		y = -2.0 * sin(t/2.5) - 3.18;
+	} else if (t <= 27.91) {
+		t -= 26.339;
+		x = 0.125*cos(2.0*t) + 2.5;
+		y = 0.1 * sin(2.0*t) - 4.06;
+	} else if (t <= 34.61) {
+		t -= 27.91;
+		x = -0.3 * cos(t/2.5 - 2.68) + 2.1;
+		y = 2.0 * sin(t/2.5 - 2.68) - 3.18;
+	} else if (t <= 37.75) {
+		t -= 34.61;
+		x = 0.15 * cos(t) + 1.65;
+		y = -sin(t) - 3.18;
+	} else {
+		t -= 37.75;
+		x = cos(1.2*t - PI) + 2.5;
+		y = -0.7 * sin(1.2*t - PI) - 3.18;
+	}
+	p->x = x*8;
+	p->y = y*8;
+}
+
 void trajectory (int traj, float t, point *p)
 {
 	switch (traj) {
@@ -265,6 +321,9 @@ void trajectory (int traj, float t, point *p)
 		case 7:
 		  traj8(t, p);
 		  break;
+		case 8:
+			traj9(t, p);
+			break;
 	}
 }
 
@@ -276,7 +335,7 @@ void trajectory (int traj, float t, point *p)
  int get_trajectory ()
  {
    int traj = 0;
-   int traj_count = 8;
+   int traj_count = 9;
    while (nNxtButtonPressed != kEnterButton)
    {
      displayTextLine(0, "Trajectory %d", (traj+1));
@@ -297,7 +356,6 @@ void trajectory (int traj, float t, point *p)
 
  float get_KP() {
    float k = 0.0;
-   int i = 0;
 	 nMotorEncoder[motorA] = 0;
 	 nNxtButtonTask = 0;
    while(nNxtButtonPressed != kEnterButton) {
