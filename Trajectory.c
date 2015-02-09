@@ -7,10 +7,11 @@
 #define CHOOSE_K 0
 
 #define R 2.76
+#define PETAL_L 13.05
 #define L 12.7
 #define F 7.3
 
-#define K 15.0
+#define K 7.0
 
 #define PI 3.1415926536
 #define numPoints 73
@@ -41,6 +42,7 @@ float points[numPoints][2] = {{3.5, 10.2}, {5.0,6.8}, {8.8,5.8}, {11.7,7.2}, {12
 		{15.9,19.8}, {14.8,19.7}, {14.2,21.2},{13.8,21.3}};
 
 float kp;
+float l;
 
 float max(float a, float b){
 	if(a > b)
@@ -73,26 +75,10 @@ task trajectory_task()
 		float vl = (leftEnc - oldL) / dt * PI / 180.0 * R;
 		float vr = (rightEnc - oldR) / dt * PI / 180.0 * R;
 
-		//float v2 = min(vr, vl);
 		float vmax = max(abs(vr), abs(vl));
-		float r1;
-		if(vr != vl){
-			r1 = abs(vmax*L/(vr - vl));
-		}
-		else{
-			r1 = L/2;
-		}
-
 		float v = (vr + vl) / 2.0;
 
-		if(v < 0){
-			r1 = r1 * -.000455 + 1.0045;
-		}
-		else{
-			r1 = r1 * -.002191 + .9885124;
-		}
-
-		float w = (vr - vl) / L;// * r1;
+		float w = (vr - vl) / l;
 
 		float k00 = v*cos(robot_TH);
 		float k01 = v*sin(robot_TH);
@@ -110,17 +96,6 @@ task trajectory_task()
 		robot_c.x += dt/6.0 * (k00 + 2*(k10 + k20) + k30);
 		robot_c.y += dt/6.0 * (k01 + 2*(k11 + k21) + k31);
 		robot_TH += dt/6.0 * (k02 + 2*(k12 + k22) + k32);
-
-
-		/*
-		float dl =
-
-		float dd = (vl + vr) / 2.0;
-		float dth = (vr-vl) / L;
-
-		robot_c.x += dd * cos(robot_TH);
-		robot_c.y += dd * sin(robot_TH);
-		robot_TH += dth;*/
 
 		marker_c.x = robot_c.x + F * cos(robot_TH);
 		marker_c.y = robot_c.y + F * sin(robot_TH);
@@ -374,8 +349,8 @@ task speedSounds(){
 	while(1){
 		float power = (abs(motor[motorB]) + abs(motor[motorC])) / 2.0;
 		displayTextLine(7, "motor: %f", motor[motorB]);
-		float freq = power/100.0 * (650 - 200);
-		freq += 200;
+		float freq = power/100.0 * (800 - 400);
+		freq += 400;
 		playTone((int)freq,5);
 		sleep(3);
 	}
@@ -400,6 +375,11 @@ task main()
 	nNxtButtonTask  = 0;
 
 	tn = get_trajectory();
+
+	if (tn == 6)
+		l = PETAL_L;
+	else
+		l = L;
 
 	for (int i = 0; i < 7; i++) {
 		nxtDisplayClearTextLine(i);
